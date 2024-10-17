@@ -1,94 +1,60 @@
 import os
-import json
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 from urllib.parse import quote
 
-# Load environment variables from .env
 load_dotenv()
 
-# Configuration from environment variables
 AZURE_CONNECTION_STRING = os.getenv("AZURE_CONNECTION_STRING")
 SOURCE_CONTAINER = os.getenv("SOURCE_CONTAINER")
 DESTINATION_CONTAINER = os.getenv("DESTINATION_CONTAINER")
-BLOB_PREFIX = os.getenv("BLOB_PREFIX", "")  # Folder path where JSON files are stored
+SOURCE_FILE = os.getenv("SOURCE_FILE")
 
-LANGUAGE_ID_MAP = {
-    "ine-nhxrt-19q": "india",
-    "hin-pqwrk-23h": "hindi",
-    "fre-mczbv-78d": "french"
-}
-
-# Initialize Blob Service Client
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
 
 def encode_path(path):
-    """URL-encode the blob path."""
     return quote(path, safe="/")
 
-def copy_blob(src_container, dest_container, src_path, dest_path):
-    """Copy a blob from source to destination."""
+def copy_blob(source_container, destination_container, src_path, dest_path):
     encoded_src_path = encode_path(src_path)
     source_blob_url = (
         f"https://{blob_service_client.account_name}.blob.core.windows.net/"
-        f"{src_container}/{encoded_src_path}"
+        f"{source_container}/{encoded_src_path}"
     )
-
-    print(f"Source Blob URL: {source_blob_url}")
-    print(f"Destination Path: {dest_path}")
-
+    print(f"Copying from: {source_blob_url} to {dest_path}")
     try:
         blob_client = blob_service_client.get_blob_client(
-            container=dest_container, blob=dest_path
-        )
+            container=destination_container, blob=dest_path )
         copy_operation = blob_client.start_copy_from_url(source_blob_url)
-        print(f"Copying '{src_path}' to '{dest_path}'. Status: {copy_operation['copy_status']}")
+        print(f"Copy Status: {copy_operation['copy_status']}")
+        verify_copy(dest_path)
     except Exception as e:
         print(f"Error copying '{src_path}' to '{dest_path}': {e}")
 
-def find_destination_path(src_path, lang_id):
-    """Determine the correct destination path based on the language ID."""
-    parts = src_path.split('/')
-    asset_type, filename = parts[-2], parts[-1]
-
-    language_folder = LANGUAGE_ID_MAP.get(lang_id)
-    if not language_folder:
-        raise ValueError(f"Unknown language ID: {lang_id}")
-
-    return f"{language_folder}/{asset_type}/{filename}"
-
-def process_json_from_blob(blob_name):
-    """Read and process a JSON file from the blob storage."""
+def verify_copy(dest_path):
+    blob_client = blob_service_client.get_blob_client(
+        container=DESTINATION_CONTAINER, blob=dest_path )
     try:
-        blob_client = blob_service_client.get_blob_client(SOURCE_CONTAINER, blob_name)
-        json_data = json.loads(blob_client.download_blob().readall())
-        lang_id = json_data.get("langId")
-
-        for asset_type in ["images", "videos", "documents"]:
-            assets = json_data.get(asset_type, [])
-            for src_path in assets:
-                try:
-                    dest_path = find_destination_path(src_path, lang_id)
-                    copy_blob(SOURCE_CONTAINER, DESTINATION_CONTAINER, src_path, dest_path)
-                except ValueError as e:
-                    print(e)
-
+        blob_client.get_blob_properties()
+        print(f"Verification Success: '{dest_path}' exists.")
     except Exception as e:
-        print(f"Error processing '{blob_name}': {e}")
+        print(f"Verification Failed: '{dest_path}' does not exist. Error: {e}")
 
-def traverse_and_process_json_files():
-    """Traverse the blob storage to find and process all JSON files."""
+def process_files(source_file_path):
     try:
-        container_client = blob_service_client.get_container_client(SOURCE_CONTAINER)
-        blob_list = container_client.list_blobs(name_starts_with=BLOB_PREFIX)
+        with open(source_file_path, 'r') as src_file:
+            for line in src_file:
+                src_path, lang_id = line.strip().split(" : ")
+                lang_id = lang_id.strip('"')
+                parts = src_path.strip("/").split("/")
+                parts[0] = lang_id 
+                dest_path = "/".join(parts)
+                copy_blob(SOURCE_CONTAINER, DESTINATION_CONTAINER, src_path, dest_path)
 
-        for blob in blob_list:
-            if blob.name.endswith(".json"):
-                print(f"Processing JSON: {blob.name}")
-                process_json_from_blob(blob.name)
-
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
     except Exception as e:
-        print(f"Error traversing blob storage: {e}")
+        print(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
-    traverse_and_process_json_files()
+    process_files(SOURCE_FILE)
