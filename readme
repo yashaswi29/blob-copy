@@ -1,0 +1,24 @@
+Source Blob Verification:
+
+The script must verify that the source blob exists in the Azure Blob Storage before attempting to copy.
+Dynamic Directory Traversal:
+
+The script must dynamically traverse the blob container to find the specified target folder (e.g., procedure, hin-pqwrk-23h) without assuming a fixed directory structure.
+The script should identify the actual location of these folders if they exist in the blob storage.
+Destination Path Construction:
+
+The destination path should not create new directories; instead, it should find the existing folders corresponding to the target names.
+If a target folder (like procedure) is found alongside fre-mczbv-78d, the script should copy the file to the existing structure without creating new folders.
+If a target folder (like hin-pqwrk-23h) is present alongside fre-mczbv-78d, the script should search within that folder for the appropriate path structure (like content/assets/images/africa/icon/procedure/) to paste the file.
+Logging and Output:
+
+The script should log the source blob being copied, the destination path, and any relevant success or error messages regarding the copy operation.
+The output should clearly indicate whether the operation was successful or if the specified target folder was not found.
+No Hard-Coding of Paths:
+
+The script should avoid hard-coding paths and instead rely on the input provided through source.txt and the existing structure in the Azure Blob Storage.
+Flexibility:
+
+The logic should accommodate variations in folder names and paths without requiring specific folder structures to be predefined.
+
+
